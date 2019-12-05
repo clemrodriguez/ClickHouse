@@ -1,5 +1,9 @@
 #pragma once
 
+#include "config_core.h"
+
+#if USE_SSL
+
 #include <ext/scope_guard.h>
 #include <openssl/pem.h>
 #include <openssl/rsa.h>
@@ -915,10 +919,10 @@ public:
 
         auto user = context.getUser(user_name);
 
-        if (user->password_double_sha1_hex.empty())
+        if (user->authentication.getType() != DB::Authentication::DOUBLE_SHA1_PASSWORD)
             throw Exception("Cannot use " + getName() + " auth plugin for user " + user_name + " since its password isn't specified using double SHA1.", ErrorCodes::UNKNOWN_EXCEPTION);
 
-        Poco::SHA1Engine::Digest double_sha1_value = Poco::DigestEngine::digestFromHex(user->password_double_sha1_hex);
+        Poco::SHA1Engine::Digest double_sha1_value = user->authentication.getPasswordHashBinary();
         assert(double_sha1_value.size() == Poco::SHA1Engine::DIGEST_SIZE);
 
         Poco::SHA1Engine engine;
@@ -1075,3 +1079,5 @@ private:
 
 }
 }
+
+#endif // USE_SSL

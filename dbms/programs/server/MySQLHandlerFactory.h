@@ -1,5 +1,8 @@
 #pragma once
 
+#include <Common/config.h>
+#if USE_POCO_NETSSL && USE_SSL
+
 #include <Poco/Net/TCPServerConnectionFactory.h>
 #include <atomic>
 #include <openssl/rsa.h>
@@ -37,3 +40,4 @@ public:
 };
 
 }
+#endif

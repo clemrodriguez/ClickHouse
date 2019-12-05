@@ -1,5 +1,6 @@
+#include "MySQLHandlerFactory.h"
+#if USE_POCO_NETSSL && USE_SSL
 #include <Common/OpenSSLHelpers.h>
-#include <Poco/Crypto/X509Certificate.h>
 #include <Poco/Net/SSLManager.h>
 #include <Poco/Net/TCPServerConnectionFactory.h>
 #include <Poco/Util/Application.h>
@@ -7,7 +8,6 @@
 #include <ext/scope_guard.h>
 #include "IServer.h"
 #include "MySQLHandler.h"
-#include "MySQLHandlerFactory.h"
 
 namespace DB
 {
@@ -122,3 +122,4 @@ Poco::Net::TCPServerConnection * MySQLHandlerFactory::createConnection(const Poc
 }
 
 }
+#endif

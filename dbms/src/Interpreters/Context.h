@@ -12,8 +12,8 @@
 #include <Common/MultiVersion.h>
 #include <Common/ThreadPool.h>
 #include "config_core.h"
-#include <Common/SensitiveDataMasker.h>
 #include <Storages/IStorage_fwd.h>
+#include <Common/DiskSpaceMonitor.h>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -43,11 +43,10 @@ namespace DB
 
 struct ContextShared;
 class Context;
-class IRuntimeComponentsFactory;
 class QuotaForIntervals;
 class EmbeddedDictionaries;
-class ExternalDictionaries;
-class ExternalModels;
+class ExternalDictionariesLoader;
+class ExternalModelsLoader;
 class InterserverIOHandler;
 class BackgroundProcessingPool;
 class BackgroundSchedulePool;
@@ -101,6 +100,11 @@ using TableAndCreateASTs = std::map<String, TableAndCreateAST>;
 /// Callback for external tables initializer
 using ExternalTablesInitializer = std::function<void(Context &)>;
 
+/// Callback for initialize input()
+using InputInitializer = std::function<void(Context &, const StoragePtr &)>;
+/// Callback for reading blocks of data from client for function input()
+using InputBlocksReader = std::function<Block(Context &)>;
+
 /// An empty interface for an arbitrary object that may be attached by a shared pointer
 /// to query context, when using ClickHouse as a library.
 struct IHostContext
@@ -124,6 +128,9 @@ private:
 
     ClientInfo client_info;
     ExternalTablesInitializer external_tables_initializer_callback;
+
+    InputInitializer input_initializer_callback;
+    InputBlocksReader input_blocks_reader;
 
     std::shared_ptr<QuotaForIntervals> quota;           /// Current quota. By default - empty quota, that have no limits.
     String current_database;
@@ -166,7 +173,6 @@ private:
 
 public:
     /// Create initial Context with ContextShared and etc.
-    static Context createGlobal(std::unique_ptr<IRuntimeComponentsFactory> runtime_components_factory);
     static Context createGlobal();
 
     Context(const Context &);
@@ -177,9 +183,6 @@ public:
     String getTemporaryPath() const;
     String getFlagsPath() const;
     String getUserFilesPath() const;
-
-    void setSensitiveDataMasker(std::unique_ptr<SensitiveDataMasker> sensitive_data_masker);
-    SensitiveDataMasker * getSensitiveDataMasker() const;
 
     void setPath(const String & path);
     void setTemporaryPath(const String & path);
@@ -217,6 +220,17 @@ public:
     /// This method is called in executeQuery() and will call the external tables initializer.
     void initializeExternalTablesIfSet();
 
+    /// When input() is present we have to send columns structure to client
+    void setInputInitializer(InputInitializer && initializer);
+    /// This method is called in StorageInput::read while executing query
+    void initializeInput(const StoragePtr & input_storage);
+
+    /// Callback for read data blocks from client one by one for function input()
+    void setInputBlocksReaderCallback(InputBlocksReader && reader);
+    /// Get callback for reading data for input()
+    InputBlocksReader getInputBlocksReaderCallback() const;
+    void resetInputCallbacks();
+
     ClientInfo & getClientInfo() { return client_info; }
     const ClientInfo & getClientInfo() const { return client_info; }
 
@@ -237,6 +251,8 @@ public:
     bool isExternalTableExist(const String & table_name) const;
     bool hasDatabaseAccessRights(const String & database_name) const;
     void assertTableExists(const String & database_name, const String & table_name) const;
+
+    bool hasDictionaryAccessRights(const String & dictionary_name) const;
 
     /** The parameter check_database_access_rights exists to not check the permissions of the database again,
       * when assertTableDoesntExist or assertDatabaseExists is called inside another function that already
@@ -303,11 +319,11 @@ public:
     void checkSettingsConstraints(const SettingsChanges & changes);
 
     const EmbeddedDictionaries & getEmbeddedDictionaries() const;
-    const ExternalDictionaries & getExternalDictionaries() const;
-    const ExternalModels & getExternalModels() const;
+    const ExternalDictionariesLoader & getExternalDictionariesLoader() const;
+    const ExternalModelsLoader & getExternalModelsLoader() const;
     EmbeddedDictionaries & getEmbeddedDictionaries();
-    ExternalDictionaries & getExternalDictionaries();
-    ExternalModels & getExternalModels();
+    ExternalDictionariesLoader & getExternalDictionariesLoader();
+    ExternalModelsLoader & getExternalModelsLoader();
     void tryCreateEmbeddedDictionaries() const;
 
     /// I/O formats.
@@ -470,6 +486,16 @@ public:
     /// Lets you select the compression codec according to the conditions described in the configuration file.
     std::shared_ptr<ICompressionCodec> chooseCompressionCodec(size_t part_size, double part_size_ratio) const;
 
+    DiskSpace::DiskSelector & getDiskSelector() const;
+
+    /// Provides storage disks
+    const DiskSpace::DiskPtr & getDisk(const String & name) const;
+
+    DiskSpace::StoragePolicySelector & getStoragePolicySelector() const;
+
+    /// Provides storage politics schemes
+    const DiskSpace::StoragePolicyPtr & getStoragePolicy(const String &name) const;
+
     /// Get the server uptime in seconds.
     time_t getUptimeSeconds() const;
 
@@ -509,6 +535,7 @@ public:
     bool hasQueryParameters() const;
     const NameToNameMap & getQueryParameters() const;
     void setQueryParameter(const String & name, const String & value);
+    void setQueryParameters(const NameToNameMap & parameters) { query_parameters = parameters; }
 
 #if USE_EMBEDDED_COMPILER
     std::shared_ptr<CompiledExpressionCache> getCompiledExpressionCache() const;

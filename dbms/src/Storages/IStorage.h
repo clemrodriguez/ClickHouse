@@ -15,7 +15,7 @@
 #include <Common/ActionLock.h>
 #include <Common/Exception.h>
 #include <Common/RWLock.h>
-#include <Common/SettingsChanges.h>
+#include <Common/TypePromotion.h>
 
 #include <optional>
 #include <shared_mutex>
@@ -36,6 +36,8 @@ using StorageActionBlockType = size_t;
 class ASTCreateQuery;
 
 struct Settings;
+struct SettingChange;
+using SettingsChanges = std::vector<SettingChange>;
 
 class AlterCommands;
 class MutationCommands;
@@ -62,7 +64,7 @@ struct ColumnSize
   * - data storage structure (compression, etc.)
   * - concurrent access to data (locks, etc.)
   */
-class IStorage : public std::enable_shared_from_this<IStorage>
+class IStorage : public std::enable_shared_from_this<IStorage>, public TypePromotion<IStorage>
 {
 public:
     IStorage() = default;
@@ -99,6 +101,9 @@ public:
 
     /// Returns true if the storage supports settings.
     virtual bool supportsSettings() const { return false; }
+
+    /// Returns true if the blocks shouldn't be pushed to associated views on insert.
+    virtual bool noPushingToViews() const { return false; }
 
     /// Optional size information of each physical column.
     /// Currently it's only used by the MergeTree family for query optimizations.
@@ -365,8 +370,8 @@ public:
     /** Notify engine about updated dependencies for this storage. */
     virtual void updateDependencies() {}
 
-    /// Returns data path if storage supports it, empty string otherwise.
-    virtual String getDataPath() const { return {}; }
+    /// Returns data paths if storage supports it, empty vector otherwise.
+    virtual Strings getDataPaths() const { return {}; }
 
     /// Returns ASTExpressionList of partition key expression for storage or nullptr if there is none.
     virtual ASTPtr getPartitionKeyAST() const { return nullptr; }
@@ -398,6 +403,8 @@ public:
     /// Returns names of primary key + secondary sorting columns
     virtual Names getSortingKeyColumns() const { return {}; }
 
+    /// Returns storage policy if storage supports it
+    virtual DiskSpace::StoragePolicyPtr getStoragePolicy() const { return {}; }
 
 private:
     /// You always need to take the next three locks in this order.

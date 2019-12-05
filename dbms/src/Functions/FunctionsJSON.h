@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Functions/IFunction.h>
+#include <Core/AccurateComparison.h>
 #include <Functions/DummyJSONParser.h>
 #include <Functions/SimdJSONParser.h>
 #include <Functions/RapidJSONParser.h>
@@ -8,7 +9,6 @@
 #include <Common/CpuId.h>
 #include <Common/typeid_cast.h>
 #include <Common/assert_cast.h>
-#include <Core/AccurateComparison.h>
 #include <Core/Settings.h>
 #include <Columns/ColumnConst.h>
 #include <Columns/ColumnString.h>
@@ -65,7 +65,7 @@ public:
     {
         /// Choose JSONParser.
 #if USE_SIMDJSON
-        if (context.getSettings().allow_simdjson && Cpu::CpuFlagsCache::have_SSE42 && Cpu::CpuFlagsCache::have_PCLMUL)
+        if (context.getSettingsRef().allow_simdjson && Cpu::CpuFlagsCache::have_SSE42 && Cpu::CpuFlagsCache::have_PCLMUL)
         {
             Executor<SimdJSONParser>::run(block, arguments, result_pos, input_rows_count);
             return;
@@ -447,7 +447,7 @@ public:
             if (!accurate::convertNumeric(JSONParser::getDouble(it), value))
                 return false;
         }
-        else if (JSONParser::isBool(it) && std::is_integral_v<NumberType> && convert_bool_to_integer)
+        else if (JSONParser::isBool(it) && is_integral_v<NumberType> && convert_bool_to_integer)
             value = static_cast<NumberType>(JSONParser::getBool(it));
         else
             return false;

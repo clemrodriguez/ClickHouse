@@ -6,7 +6,7 @@
 #include <Common/getNumberOfPhysicalCPUCores.h>
 #include <Common/ThreadPool.h>
 #include <Interpreters/Context.h>
-#include <Interpreters/ExternalDictionaries.h>
+#include <Interpreters/ExternalDictionariesLoader.h>
 #include <Interpreters/EmbeddedDictionaries.h>
 #include <Interpreters/ActionLocksManager.h>
 #include <Interpreters/InterpreterDropQuery.h>
@@ -50,6 +50,7 @@ namespace ActionLocks
     extern StorageActionBlockType ReplicationQueue;
     extern StorageActionBlockType DistributedSend;
     extern StorageActionBlockType PartsTTLMerge;
+    extern StorageActionBlockType PartsMove;
 }
 
 
@@ -164,11 +165,11 @@ BlockIO InterpreterSystemQuery::execute()
             break;
 #endif
         case Type::RELOAD_DICTIONARY:
-            system_context.getExternalDictionaries().reload(query.target_dictionary, true /* load the dictionary even if it wasn't loading before */);
+            system_context.getExternalDictionariesLoader().reload(query.target_dictionary, true /* load the dictionary even if it wasn't loading before */);
             break;
         case Type::RELOAD_DICTIONARIES:
             executeCommandsAndThrowIfError(
-                    [&] () { system_context.getExternalDictionaries().reload(); },
+                    [&] () { system_context.getExternalDictionariesLoader().reload(); },
                     [&] () { system_context.getEmbeddedDictionaries().reload(); }
             );
             break;
@@ -189,6 +190,12 @@ BlockIO InterpreterSystemQuery::execute()
             break;
         case Type::START_TTL_MERGES:
             startStopAction(context, query, ActionLocks::PartsTTLMerge, true);
+            break;
+        case Type::STOP_MOVES:
+            startStopAction(context, query, ActionLocks::PartsMove, false);
+            break;
+        case Type::START_MOVES:
+            startStopAction(context, query, ActionLocks::PartsMove, true);
             break;
         case Type::STOP_FETCHES:
             startStopAction(context, query, ActionLocks::PartsFetch, false);
@@ -320,7 +327,7 @@ void InterpreterSystemQuery::restartReplicas(Context & system_context)
 
     ThreadPool pool(std::min(size_t(getNumberOfPhysicalCPUCores()), replica_names.size()));
     for (auto & table : replica_names)
-        pool.schedule([&] () { tryRestartReplica(table.first, table.second, system_context); });
+        pool.scheduleOrThrowOnError([&]() { tryRestartReplica(table.first, table.second, system_context); });
     pool.wait();
 }
 

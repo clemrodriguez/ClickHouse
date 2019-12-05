@@ -92,9 +92,9 @@ void SettingNumber<bool>::set(const String & x)
 template <typename Type>
 void SettingNumber<Type>::serialize(WriteBuffer & buf) const
 {
-    if constexpr (std::is_integral_v<Type> && std::is_unsigned_v<Type>)
+    if constexpr (is_integral_v<Type> && is_unsigned_v<Type>)
         writeVarUInt(static_cast<UInt64>(value), buf);
-    else if constexpr (std::is_integral_v<Type> && std::is_signed_v<Type>)
+    else if constexpr (is_integral_v<Type> && is_signed_v<Type>)
         writeVarInt(static_cast<Int64>(value), buf);
     else
     {
@@ -106,13 +106,13 @@ void SettingNumber<Type>::serialize(WriteBuffer & buf) const
 template <typename Type>
 void SettingNumber<Type>::deserialize(ReadBuffer & buf)
 {
-    if constexpr (std::is_integral_v<Type> && std::is_unsigned_v<Type>)
+    if constexpr (is_integral_v<Type> && is_unsigned_v<Type>)
     {
         UInt64 x;
         readVarUInt(x, buf);
         set(static_cast<Type>(x));
     }
-    else if constexpr (std::is_integral_v<Type> && std::is_signed_v<Type>)
+    else if constexpr (is_integral_v<Type> && is_signed_v<Type>)
     {
         Int64 x;
         readVarInt(x, buf);
@@ -339,6 +339,18 @@ void SettingEnum<EnumType, Tag>::deserialize(ReadBuffer & buf)
     String s;
     readBinary(s, buf);
     set(s);
+}
+
+template <typename EnumType, typename Tag>
+Field SettingEnum<EnumType, Tag>::toField() const
+{
+    return toString();
+}
+
+template <typename EnumType, typename Tag>
+void SettingEnum<EnumType, Tag>::set(const Field & x)
+{
+    set(safeGet<const String &>(x));
 }
 
 

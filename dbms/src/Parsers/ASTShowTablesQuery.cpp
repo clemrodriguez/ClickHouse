@@ -1,5 +1,6 @@
 #include <iomanip>
 #include <Parsers/ASTShowTablesQuery.h>
+#include <Common/quoteString.h>
 
 
 namespace DB
@@ -13,7 +14,7 @@ ASTPtr ASTShowTablesQuery::clone() const
     return res;
 }
 
-void ASTShowTablesQuery::formatQueryImpl(const FormatSettings & settings, FormatState &, FormatStateStacked) const
+void ASTShowTablesQuery::formatQueryImpl(const FormatSettings & settings, FormatState & state, FormatStateStacked frame) const
 {
     if (databases)
     {
@@ -30,6 +31,12 @@ void ASTShowTablesQuery::formatQueryImpl(const FormatSettings & settings, Format
         if (!like.empty())
             settings.ostr << (settings.hilite ? hilite_keyword : "") << " LIKE " << (settings.hilite ? hilite_none : "")
                 << std::quoted(like, '\'');
+
+        if (limit_length)
+        {
+            settings.ostr << (settings.hilite ? hilite_keyword : "") << " LIMIT " << (settings.hilite ? hilite_none : "");
+            limit_length->formatImpl(settings, state, frame);
+        }
     }
 }
 

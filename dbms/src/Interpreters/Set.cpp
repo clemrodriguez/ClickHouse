@@ -246,7 +246,7 @@ void Set::createFromAST(const DataTypes & types, ASTPtr node, const Context & co
         else if (const auto * func = elem->as<ASTFunction>())
         {
             Field function_result;
-            const TupleBackend * tuple = nullptr;
+            const Tuple * tuple = nullptr;
             if (func->name != "tuple")
             {
                 if (!tuple_type)
@@ -257,7 +257,7 @@ void Set::createFromAST(const DataTypes & types, ASTPtr node, const Context & co
                     throw Exception("Invalid type of set. Expected tuple, got " + String(function_result.getTypeName()),
                                     ErrorCodes::INCORRECT_ELEMENT_OF_SET);
 
-                tuple = &function_result.get<Tuple>().toUnderType();
+                tuple = &function_result.get<Tuple>();
             }
 
             size_t tuple_size = tuple ? tuple->size() : func->arguments->children.size();
@@ -424,7 +424,8 @@ void Set::checkColumnsNumber(size_t num_key_columns) const
 
 void Set::checkTypesEqual(size_t set_type_idx, const DataTypePtr & other_type) const
 {
-    if (!removeNullable(data_types[set_type_idx])->equals(*removeNullable(other_type)))
+
+    if (!removeNullable(recursiveRemoveLowCardinality(data_types[set_type_idx]))->equals(*removeNullable(recursiveRemoveLowCardinality(other_type))))
         throw Exception("Types of column " + toString(set_type_idx + 1) + " in section IN don't match: "
                         + data_types[set_type_idx]->getName() + " on the right, " + other_type->getName() +
                         " on the left.", ErrorCodes::TYPE_MISMATCH);
